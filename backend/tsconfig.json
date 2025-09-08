@@ -12,6 +12,11 @@
     "moduleResolution": "node",
     "resolveJsonModule":true,
     "outDir": "./dist"
+    "skipLibCheck": true,
+    "sourceMap": false,
+    "declaration": false,
+    "incremental": false,
+    "composite": false
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules"]
