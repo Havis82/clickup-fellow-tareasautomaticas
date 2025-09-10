@@ -37,7 +37,9 @@ passport.use(
         const user = {
           googleId: profile.id,
           email: profile.emails?.[0]?.value,
-          tokens: { accessToken, refreshToken }
+          accessToken,
+          refreshToken,
+          profile
         };
         return done(null, user);
       } catch (err) {
