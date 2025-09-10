@@ -3,8 +3,6 @@ import passport from 'passport';
 
 const router = express.Router();
 
-console.log('🔧 Entrando en rutas de autenticación');
-
 // 👉 Autenticación con ClickUp
 router.get(
   '/clickup', (req, res, next) => {
@@ -27,28 +25,23 @@ router.get(
 router.get(
   "/google",
   passport.authenticate("google", {
+    // 👇 OBLIGATORIO: scopes
     scope: [
       "https://www.googleapis.com/auth/gmail.readonly",
-      "https://www.googleapis.com/auth/gmail.modify",
+      "https://www.googleapis.com/auth/gmail.modify"
     ],
-    accessType: "offline",      // <-- PIDE refresh_token
-    prompt: "consent",          // <-- FUERZA a Google a mostrar consentimiento (y devolverlo)
-    includeGrantedScopes: true,
-  } as any) // cast para opciones adicionales no tipadas
+    // 👇 Para obtener refresh_token
+    accessType: "offline",
+    prompt: "consent",
+    includeGrantedScopes: true
+  } as any) // cast para permitir accessType/prompt en TS
 );
 
 // 👉 Callback de Google
 router.get(
   "/google/callback",
   passport.authenticate("google", { failureRedirect: "/auth/failed" }),
-  (req, res) => {
-    // Aquí ya tienes req.user con tokens. Persiste refreshToken en tu BD si no lo haces en verify().
-    // Ejemplo rápido para ver en logs:
-    // console.log("Google user:", (req.user as any)?.tokens);
-
-    // Redirige donde quieras:
-    res.redirect("/"); // o a una página de éxito
-  }
+  (_req, res) => res.redirect("/") // o a donde quieras
 );
 
 // (Opcional) páginas de feedback
