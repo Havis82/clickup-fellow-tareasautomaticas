@@ -8,11 +8,11 @@ import session from 'express-session';
 import passport from './config/passport';
 import type { RequestHandler } from 'express';
 import authRoutes from './routes/auth';
+import gmailRoutes from './routes/gmail';
 import { errorHandler } from './middleware/errorHandler';
 import { tokenRefresherMiddleware } from './middleware/tokenRefresher';
 import webhookRoutes from './routes/webhook';
 import bodyParser from 'body-parser';
-import gmailRoutes from './routes/gmail';
 //import './smee-client';  // Add this line in development
 
 const app = express();
@@ -30,14 +30,19 @@ app.use(
     secret: process.env.SESSION_SECRET || "change-me",
     resave: false,
     saveUninitialized: false,
-    cookie: { sameSite: "lax" } // ajusta 'secure' si tienes dominio con HTTPS propio
+    cookie: { 
+      sameSite: "lax",
+      secure: true,            // Render va tras proxy https
+    },
   })
 );
 
 app.use(passport.initialize() as RequestHandler);
 app.use(passport.session() as RequestHandler);
+
 app.use('/auth', authRoutes);
 app.use('/', gmailRoutes); // esto registra GET /auth/google/callback
+app.use('/webhook', webhookRoutes);
 
 // Add this new route
 app.get('/', (req: Request, res: Response, next) => {
@@ -72,8 +77,6 @@ app.get('/login', (req, res) => {
 app.use('/clickup/protected', tokenRefresherMiddleware, (req, res) => {
   res.send('Zona protegida con token refrescado');
 });
-
-app.use('/webhook', webhookRoutes);
 
 app.use(errorHandler);
 
