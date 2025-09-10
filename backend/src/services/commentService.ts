@@ -10,7 +10,7 @@ export async function addCommentToTask(taskId: string, comment: string, accessTo
     const response = await axios.post(
         `${CLICKUP_API_URL}/task/${taskId}/comment`,
         { comment_text: comment },
-        { headers: { Authorization: accessToken } }
+        { headers: { Authorization: `Bearer ${accessToken}` } }
     );
     return response.data;
 }
