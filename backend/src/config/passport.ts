@@ -1,5 +1,5 @@
 import passport from 'passport';
-import { Strategy as GoogleStrategy, Profile as GoogleProfile, VerifyCallback as GoogleVerifyCallback } from 'passport-google-oauth20';
+import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { Strategy as OAuth2Strategy, VerifyFunction as ClickUpVerifyFunction } from 'passport-oauth2';
 
 // Validaciones de entorno
@@ -27,29 +27,13 @@ declare global {
 passport.use(
   new GoogleStrategy(
     {
-      clientID: GOOGLE_CLIENT_ID || "",
-      clientSecret: GOOGLE_CLIENT_SECRET || "",
-      callbackURL: GOOGLE_REDIRECT_URI || "",
+      clientID: process.env.GOOGLE_CLIENT_ID || "",
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
+      callbackURL: process.env.GOOGLE_REDIRECT_URI || "" // p.ej. https://clickup-hilo-correos.onrender.com/auth/google/callback
     },
-    // Firma de verify: (accessToken, refreshToken, profile, done)
-    async (accessToken: string, refreshToken: string | undefined, profile: GoogleProfile, done) => {
-      try {
-        // Aquí puedes persistir tokens en tu BD (recomendado)
-        // Para ejemplo simple, devolvemos un "user" con los tokens:
-        const user = {
-          googleId: profile.id,
-          email: profile.emails?.[0]?.value,
-          tokens: {
-            accessToken,
-            refreshToken, // <-- IMPORTANTE: guarda esto si llega
-          },
-          profile,
-        };
-
-        return done(null, user);
-      } catch (err) {
-        return done(err);
-      }
+    async (accessToken, refreshToken, profile, done) => {
+      // Guarda aquí refreshToken en tu BD si quieres
+      return done(null, { profile, tokens: { accessToken, refreshToken } });
     }
   )
 );
