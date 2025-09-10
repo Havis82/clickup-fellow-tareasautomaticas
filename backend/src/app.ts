@@ -24,12 +24,6 @@ app.use(express.json());
 // app.use('/webhook/clickup', bodyParser.raw({ type: 'application/json' }));
 
 // Use JSON body parser for other routes
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'your-secret-key',
-  resave: false,
-  saveUninitialized: false
-}));
-
 app.set("trust proxy", 1);
 app.use(
   session({
