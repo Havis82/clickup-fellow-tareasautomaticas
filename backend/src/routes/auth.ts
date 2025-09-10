@@ -38,7 +38,14 @@ router.get(
 router.get(
   '/google/callback',
   passport.authenticate('google', { failureRedirect: '/auth/failed' }),
-  (_req, res) => res.redirect('/') // o a donde quieras
+  (_req, res) => {
+    // 🔎 AHORA ESTARÁN AQUÍ
+    const u = req.user as any;
+    // Persiste aquí u.refreshToken en tu BD/almacenamiento.
+    res.send(
+      `Autenticado. accessToken: ${u?.accessToken || "N/D"} | refreshToken: ${u?.refreshToken || "N/D"}`
+    );
+  }   
 );
 
 // Feedback opcional
