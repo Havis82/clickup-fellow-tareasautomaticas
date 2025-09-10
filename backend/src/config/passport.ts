@@ -27,13 +27,22 @@ declare global {
 passport.use(
   new GoogleStrategy(
     {
-      clientID: process.env.GOOGLE_CLIENT_ID || "",
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
-      callbackURL: process.env.GOOGLE_REDIRECT_URI || "" // p.ej. https://clickup-hilo-correos.onrender.com/auth/google/callback
+      clientID: GOOGLE_CLIENT_ID || '',
+      clientSecret: GOOGLE_CLIENT_SECRET || '',
+      callbackURL: GOOGLE_REDIRECT_URI || '' // ej.: https://clickup-hilo-correos.onrender.com/auth/google/callback
     },
     async (accessToken, refreshToken, profile, done) => {
-      // Guarda aquí refreshToken en tu BD si quieres
-      return done(null, { profile, tokens: { accessToken, refreshToken } });
+      try {
+        // Aquí debes persistir refreshToken en tu BD/almacenamiento
+        const user = {
+          googleId: profile.id,
+          email: profile.emails?.[0]?.value,
+          tokens: { accessToken, refreshToken }
+        };
+        return done(null, user);
+      } catch (err) {
+        return done(err as any);
+      }
     }
   )
 );
@@ -61,13 +70,8 @@ passport.use('clickup', new OAuth2Strategy(
 ));
 
 // Serialización y deserialización compartida
-passport.serializeUser((user: Express.User, done) => {
-  done(null, user);
-});
-
-passport.deserializeUser((user: Express.User, done) => {
-  done(null, user);
-});
+passport.serializeUser((user: any, done) => done(null, user));
+passport.deserializeUser((obj: any, done) => done(null, obj));
 
 export default passport;
 
