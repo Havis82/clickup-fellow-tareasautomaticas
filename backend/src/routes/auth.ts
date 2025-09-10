@@ -25,39 +25,35 @@ router.get(
 
 // 👉 Autenticación con Google
 router.get(
-  '/google',
-  passport.authenticate('google', {
+  "/google",
+  passport.authenticate("google", {
     scope: [
-      'https://www.googleapis.com/auth/gmail.readonly',
-      'https://www.googleapis.com/auth/gmail.modify'
-      ],
-    accessType: 'offline',        // 🔴 clave: pide refresh_token
-    prompt: 'consent',            // 🔴 clave: fuerza el consentimiento y la entrega
-    includeGrantedScopes: true
-  })
+      "https://www.googleapis.com/auth/gmail.readonly",
+      "https://www.googleapis.com/auth/gmail.modify",
+    ],
+    accessType: "offline",      // <-- PIDE refresh_token
+    prompt: "consent",          // <-- FUERZA a Google a mostrar consentimiento (y devolverlo)
+    includeGrantedScopes: true,
+  } as any) // cast para opciones adicionales no tipadas
 );
 
 // 👉 Callback de Google
 router.get(
-  '/google/callback',
-  passport.authenticate('google', { failureRedirect: '/auth/failed' }),
+  "/google/callback",
+  passport.authenticate("google", { failureRedirect: "/auth/failed" }),
   (req, res) => {
-    // Aquí ya deberías tener el refresh_token en req.session.googleTokens.refresh_token (si Google lo entregó)
-    res.redirect('/'); // o a una página que confirme “Autenticado”
+    // Aquí ya tienes req.user con tokens. Persiste refreshToken en tu BD si no lo haces en verify().
+    // Ejemplo rápido para ver en logs:
+    // console.log("Google user:", (req.user as any)?.tokens);
+
+    // Redirige donde quieras:
+    res.redirect("/"); // o a una página de éxito
   }
 );
 
-// 👉 Ruta para cerrar sesión
-router.get('/logout', (req: express.Request, res: express.Response) => {
-  req.logout((err: any) => {
-    if (err) {
-      console.error('Error during logout:', err);
-    }
-    res.redirect('/');
-  });
-});
-
-console.log('✅ Auth routes mounted');
+// (Opcional) páginas de feedback
+router.get("/failed", (_req, res) => res.status(401).send("Login fallido"));
+router.get("/success", (_req, res) => res.send("Login ok"));
 
 export default router;
 
