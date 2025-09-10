@@ -3,14 +3,12 @@ import { Strategy as GoogleStrategy, Profile as GoogleProfile, VerifyCallback as
 import { Strategy as OAuth2Strategy, VerifyFunction as ClickUpVerifyFunction } from 'passport-oauth2';
 
 // Validaciones de entorno
-const googleClientID = process.env.GOOGLE_CLIENT_ID!;
-const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET!;
-const googleRedirectURI = process.env.GOOGLE_REDIRECT_URI!;
+const { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI } = process.env;
 const clickupClientID = process.env.CLICKUP_CLIENT_ID!;
 const clickupClientSecret = process.env.CLICKUP_CLIENT_SECRET!;
 const clickupCallbackURL = process.env.CLICKUP_CALLBACK_URL!;
 
-if (!googleClientID || !googleClientSecret || !googleRedirectURI ||
+if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !GOOGLE_REDIRECT_URI ||
     !clickupClientID || !clickupClientSecret || !clickupCallbackURL) {
   throw new Error('❌ Faltan variables de entorno necesarias para OAuth');
 }
@@ -29,33 +27,29 @@ declare global {
 passport.use(
   new GoogleStrategy(
     {
-      clientID: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-      callbackURL: process.env.GOOGLE_REDIRECT_URI!, // ej: https://TU-APP.onrender.com/auth/google/callback
-      passReqToCallback: true
+      clientID: GOOGLE_CLIENT_ID || "",
+      clientSecret: GOOGLE_CLIENT_SECRET || "",
+      callbackURL: GOOGLE_REDIRECT_URI || "",
     },
-    // (req, accessToken, refreshToken, profile, done) => {...}) en v2
-    function verify(
-      req: any,
-      accessToken: string,
-      refreshToken: string | undefined,
-      params: any,
-      profile: GoogleProfile,
-      done: (err: any, user?: any) => void
-    ) {
-      // OJO: Google solo entrega refresh_token la primera vez (o si forzamos prompt=consent)
-      // Aquí puedes persistirlo (BD, KV, etc.). Para ejemplo simple:
-      req.session = req.session || {};
-      req.session.googleTokens = {
-        access_token: accessToken,
-        refresh_token: refreshToken,  // <- guarda esto si llega
-        scope: params?.scope,
-        token_type: params?.token_type,
-        fetched_at: new Date().toISOString()
-      };
+    // Firma de verify: (accessToken, refreshToken, profile, done)
+    async (accessToken: string, refreshToken: string | undefined, profile: GoogleProfile, done) => {
+      try {
+        // Aquí puedes persistir tokens en tu BD (recomendado)
+        // Para ejemplo simple, devolvemos un "user" con los tokens:
+        const user = {
+          googleId: profile.id,
+          email: profile.emails?.[0]?.value,
+          tokens: {
+            accessToken,
+            refreshToken, // <-- IMPORTANTE: guarda esto si llega
+          },
+          profile,
+        };
 
-      // Como "usuario" puedes devolver el profile o lo que uses
-      return done(null, { googleId: profile.id, email: profile.emails?.[0]?.value });
+        return done(null, user);
+      } catch (err) {
+        return done(err);
+      }
     }
   )
 );
