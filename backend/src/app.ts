@@ -77,7 +77,6 @@ app.use('/clickup/protected', tokenRefresherMiddleware, (req, res) => {
   res.send('Zona protegida con token refrescado');
 });
 
-app.use('/clickup', clickupRoutes);
 app.use('/webhook', webhookRoutes);
 
 app.use(errorHandler);
