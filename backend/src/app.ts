@@ -30,6 +30,16 @@ app.use(session({
   saveUninitialized: false
 }));
 
+app.set("trust proxy", 1);
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || "change-me",
+    resave: false,
+    saveUninitialized: false,
+    cookie: { sameSite: "lax" } // ajusta 'secure' si tienes dominio con HTTPS propio
+  })
+);
+
 app.use(passport.initialize() as RequestHandler);
 app.use(passport.session() as RequestHandler);
 app.use('/auth', authRoutes);
