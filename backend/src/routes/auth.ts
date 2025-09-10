@@ -13,11 +13,12 @@ router.get(
   passport.authenticate('clickup', { scope: ['task:read', 'task:write'] })
 );
 
-// Si ya tienes la ruta de callback de ClickUp en otro sitio, deja esto comentado.
-// router.get('/clickup/callback',
-//   passport.authenticate('clickup', { failureRedirect: '/auth/failed' }),
-//   (_req, res) => res.redirect('/')
-// );
+router.get('/clickup/callback',
+   passport.authenticate('clickup', { 
+     failureRedirect: '/auth/failed',
+     successRedirect: '/auth/success'
+   })
+);
 
 /** ---------- GOOGLE OAUTH (Gmail) ---------- */
 // 👉 RUTA QUE INICIA EL LOGIN (AQUÍ ESTÁ EL SCOPE + OFFLINE + CONSENT)
