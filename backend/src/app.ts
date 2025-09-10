@@ -8,7 +8,6 @@ import session from 'express-session';
 import passport from './config/passport';
 import type { RequestHandler } from 'express';
 import authRoutes from './routes/auth';
-import clickupRoutes from './routes/clickup';
 import { errorHandler } from './middleware/errorHandler';
 import { tokenRefresherMiddleware } from './middleware/tokenRefresher';
 import webhookRoutes from './routes/webhook';
