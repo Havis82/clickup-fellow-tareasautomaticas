@@ -12,6 +12,7 @@ import { errorHandler } from './middleware/errorHandler';
 import { tokenRefresherMiddleware } from './middleware/tokenRefresher';
 import webhookRoutes from './routes/webhook';
 import bodyParser from 'body-parser';
+import gmailRoutes from './routes/gmail';
 //import './smee-client';  // Add this line in development
 
 const app = express();
@@ -42,6 +43,7 @@ app.use(
 app.use(passport.initialize() as RequestHandler);
 app.use(passport.session() as RequestHandler);
 app.use('/auth', authRoutes);
+app.use('/', gmailRoutes); // esto registra GET /auth/google/callback
 
 // Add this new route
 app.get('/', (req: Request, res: Response, next) => {
