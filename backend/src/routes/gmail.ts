@@ -42,7 +42,7 @@ router.get('/auth/google/callback', async (req, res) => {
   const code = req.query.code as string | undefined;
   const state = req.query.state as string | undefined;
 
-  // Si el usuario entra directo al callback sin 'code', reinicia el flujo con 'scope'
+  // ⚠️ Si entras al callback sin 'code', reinicia el flujo correctamente CON scope.
   if (!code) {
     const newState = crypto.randomUUID();
     (req.session as any).google_oauth_state = newState;
@@ -51,17 +51,17 @@ router.get('/auth/google/callback', async (req, res) => {
       client_id: GOOGLE_CLIENT_ID,
       redirect_uri: GOOGLE_REDIRECT_URI,
       response_type: 'code',
-      scope: GOOGLE_SCOPES.join(' '),
+      scope: ['https://www.googleapis.com/auth/gmail.readonly'].join(' '), // <— IMPORTANTE
       access_type: 'offline',
       include_granted_scopes: 'true',
       prompt: 'consent',
       state: newState,
     });
 
-    return res.redirect(`${GOOGLE_AUTH_ENDPOINT}?${params.toString()}`);
+    return res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
   }
 
-  // Valida estado (CSRF)
+  // ✅ Solo validamos el 'state' cuando ya hay 'code'
   const expectedState = (req.session as any).google_oauth_state;
   if (!state || !expectedState || state !== expectedState) {
     return res.status(400).send('Estado OAuth inválido o ausente');
@@ -77,7 +77,7 @@ router.get('/auth/google/callback', async (req, res) => {
       redirect_uri: GOOGLE_REDIRECT_URI,
     });
 
-    const { access_token, refresh_token, expires_in, token_type, id_token } = tokenRes.data;
+    const { access_token, refresh_token, expires_in, id_token, token_type } = tokenRes.data;
 
     // TODO: guarda 'refresh_token' de forma segura para uso posterior
     return res.json({
@@ -87,7 +87,7 @@ router.get('/auth/google/callback', async (req, res) => {
       access_token,
       refresh_token,
       id_token,
-      scopes: GOOGLE_SCOPES,
+      scopes: ['https://www.googleapis.com/auth/gmail.readonly'],
     });
   } catch (err: any) {
     console.error('Error al intercambiar el código por tokens:', err?.response?.data || err?.message || err);
