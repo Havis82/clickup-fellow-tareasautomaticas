@@ -27,17 +27,24 @@ router.get(
 router.get(
   '/google',
   passport.authenticate('google', {
-    scope: ['https://www.googleapis.com/auth/gmail.readonly'],
+    scope: [
+      'https://www.googleapis.com/auth/gmail.readonly',
+      'https://www.googleapis.com/auth/gmail.modify'
+      ],
+    accessType: 'offline',        // 🔴 clave: pide refresh_token
+    prompt: 'consent',            // 🔴 clave: fuerza el consentimiento y la entrega
+    includeGrantedScopes: true
   })
 );
 
 // 👉 Callback de Google
 router.get(
   '/google/callback',
-  passport.authenticate('google', {
-    failureRedirect: '/login',
-    successRedirect: '/', // o a donde quieras
-  })
+  passport.authenticate('google', { failureRedirect: '/auth/failed' }),
+  (req, res) => {
+    // Aquí ya deberías tener el refresh_token en req.session.googleTokens.refresh_token (si Google lo entregó)
+    res.redirect('/'); // o a una página que confirme “Autenticado”
+  }
 );
 
 // 👉 Ruta para cerrar sesión
