@@ -4,7 +4,7 @@ import { addCommentToTask } from '../services/commentService';
 
 const router = express.Router();
 
-router.post('/webhook', async (req, res) => {
+router.post('/', async (req, res) => {
   try {
     const { taskId, body } = req.body;
     const accessToken = process.env.CLICKUP_ACCESS_TOKEN;
