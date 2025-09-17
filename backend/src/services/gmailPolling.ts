@@ -31,6 +31,165 @@ function gmailThreadWebUrl(threadId: string, accountIndex = 0) {
 }
 
 /** =========================
+ *  Helpers de cuerpo/fecha Gmail
+ *  ========================= */
+
+// Gmail codifica el cuerpo en base64url
+function decodeBody(data?: string): string {
+  if (!data) return "";
+  const b64 = data.replace(/-/g, "+").replace(/_/g, "/");
+  return Buffer.from(b64, "base64").toString("utf-8");
+}
+
+// Extrae texto plano del payload. Prioriza text/plain; si no hay, usa text/html (stripping).
+function extractPlainTextFromPayload(payload: any): string {
+  if (!payload) return "";
+
+  const mime = (payload.mimeType || "").toLowerCase();
+  const bodyData = payload.body?.data;
+
+  // Caso simple: text/plain
+  if (mime === "text/plain") {
+    return decodeBody(bodyData);
+  }
+
+  // Caso HTML: convertir a texto
+  if (mime === "text/html") {
+    const html = decodeBody(bodyData);
+    return stripHtml(html);
+  }
+
+  // Multipart: buscar primero text/plain, luego text/html
+  const parts = payload.parts || [];
+  if (Array.isArray(parts) && parts.length) {
+    // 1) text/plain
+    for (const p of parts) {
+      if (String(p.mimeType).toLowerCase() === "text/plain") {
+        return decodeBody(p.body?.data);
+      }
+    }
+    // 2) text/html
+    for (const p of parts) {
+      if (String(p.mimeType).toLowerCase() === "text/html") {
+        return stripHtml(decodeBody(p.body?.data));
+      }
+    }
+    // 3) recursivo por si hay anidación
+    for (const p of parts) {
+      const v = extractPlainTextFromPayload(p);
+      if (v) return v;
+    }
+  }
+
+  return "";
+}
+
+function stripHtml(html: string): string {
+  // Quita etiquetas básicas y decodifica entidades más comunes
+  let text = html.replace(/<style[\s\S]*?<\/style>/gi, "")
+                 .replace(/<script[\s\S]*?<\/script>/gi, "")
+                 .replace(/<[^>]+>/g, " ");
+  const entities: Record<string, string> = {
+    "&nbsp;": " ",
+    "&amp;": "&",
+    "&lt;": "<",
+    "&gt;": ">",
+    "&quot;": "\"",
+    "&#39;": "'",
+  };
+  for (const [k, v] of Object.entries(entities)) {
+    text = text.split(k).join(v);
+  }
+  // Normaliza espacios
+  return text.replace(/\s+\n/g, "\n").replace(/\n\s+/g, "\n").replace(/[ \t]{2,}/g, " ").trim();
+}
+
+// Intenta quitar el texto citado típico de respuestas (“El … escribió:”, “On … wrote:” y firmas)
+function removeQuotedText(text: string): string {
+  if (!text) return text;
+  let t = text.replace(/\r/g, "");
+
+  const markers = [
+    /\nOn .+ wrote:\n/i,                               // Inglés
+    /\nEl .+ escribi[oó]:\n/i,                         // Español
+    /\n-+ ?Mensaje original ?-+\n/i,                   // Español
+    /\n-+ ?Original Message ?-+\n/i,                   // Inglés
+    /\n-+ ?Forwarded message ?-+\n/i,                  // Reenviado
+  ];
+
+  let cutIndex = -1;
+  for (const rx of markers) {
+    const m = rx.exec(t);
+    if (m && (cutIndex === -1 || m.index < cutIndex)) cutIndex = m.index;
+  }
+  if (cutIndex !== -1) t = t.slice(0, cutIndex);
+
+  // Quita firmas estándar que empiezan con "-- "
+  const sigIdx = t.indexOf("\n-- ");
+  if (sigIdx !== -1) t = t.slice(0, sigIdx);
+
+  return t.trim();
+}
+
+// Formatea fecha en español abreviado: "El mié, 17 sept 2025 a las 15:59"
+function formatDateEsMadrid(msEpoch: number): string {
+  const dtf = new Intl.DateTimeFormat("es-ES", {
+    timeZone: "Europe/Madrid",
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  // p.ej. "mié, 17 sept 2025, 15:59"
+  let s = dtf.format(new Date(msEpoch));
+  s = s.replace(/, /, " a las "); // "mié, 17 sept 2025 a las 15:59"
+  // Añade "El " delante y quita puntos en abrevs. ("sept." -> "sept")
+  s = "El " + s.replace(/\./g, "");
+  return s;
+}
+
+// Extrae solo el email de "Nombre <correo@dominio>"
+function extractEmail(addr?: string): string {
+  if (!addr) return "";
+  const m = addr.match(/<([^>]+)>/);
+  return (m ? m[1] : addr).trim();
+}
+
+/** Formatea TODO el hilo como texto para el comentario */
+function formatThreadAsComment(messages: any[]): string {
+  // Orden cronológico
+  const sorted = [...messages].sort((a, b) => Number(a.internalDate) - Number(b.internalDate));
+
+  const blocks: string[] = [];
+  for (let i = 0; i < sorted.length; i++) {
+    const msg = sorted[i];
+    const headers = msg.payload?.headers as any[] | undefined;
+
+    const from = extractEmail(headerValue(headers, "From"));
+    const to = extractEmail(headerValue(headers, "To"));
+    const when = Number(msg.internalDate || 0);
+    const whenTxt = formatDateEsMadrid(when);
+
+    const rawBody = extractPlainTextFromPayload(msg.payload);
+    const body = removeQuotedText(rawBody);
+
+    const block = [
+      whenTxt,
+      `De: ${from}`,
+      `A: ${to}`,
+      body || "(sin contenido)",
+    ].join("\n");
+
+    blocks.push(block);
+  }
+
+  return blocks.join("\n--------------------------------------\n");
+}
+
+/** =========================
  *  ClickUp helpers
  *  ========================= */
 
@@ -217,21 +376,20 @@ export async function pollGmail() {
       for (const m of h.messagesAdded) {
         const msgId = m.message.id;
 
-        // 3) Obtener mensaje completo
+        // 3) Obtener mensaje (para extraer threadId, subject y snippet)
         const msgRes = await axios.get(
           `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msgId}`,
           { headers: { Authorization: `Bearer ${accessToken}` } }
         );
         const threadId = msgRes.data.threadId as string;
-        const snippet = msgRes.data.snippet as string;
         const headersMsg = msgRes.data.payload?.headers as any[] | undefined;
         const subjectRaw = headerValue(headersMsg, "Subject") || "(Sin asunto)";
         const subject = normalizeSubject(subjectRaw);
+        const snippet = msgRes.data.snippet as string;
 
-        // 4) Buscar tarea por threadId
+        // 4) Buscar tarea por threadId; si no existe, buscar por asunto reciente en todo el Space
         let taskId = await findTaskByThreadId(threadId, spaceId, threadFieldId, clickupToken);
 
-        // 5) Si no existe, buscar por asunto en todas las listas recientes
         if (!taskId) {
           taskId = await findTaskBySubjectRecentInSpace(subject, spaceId, clickupToken, 120);
           if (taskId) {
@@ -239,7 +397,7 @@ export async function pollGmail() {
           }
         }
 
-        // 6) Si aún no existe y lo permites, crear en lista por defecto
+        // 5) Crear si no existe y está permitido
         if (!taskId && autoCreate && defaultListId) {
           taskId = await createTaskForThread(
             defaultListId,
@@ -256,9 +414,20 @@ export async function pollGmail() {
           continue;
         }
 
-        // 7) Añadir comentario
-        await addCommentToTask(taskId, snippet, clickupToken);
-        console.log(`✅ Comentario añadido en tarea ${taskId} (thread ${threadId})`);
+        // 6) 🚀 NUEVO: obtener TODO el hilo y formatearlo bonito
+        const threadRes = await axios.get(
+          `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}`,
+          {
+            headers: { Authorization: `Bearer ${accessToken}` },
+            params: { format: "full" },
+          }
+        );
+        const messages = threadRes.data?.messages ?? [];
+        const formatted = formatThreadAsComment(messages);
+
+        // 7) Enviar comentario formateado
+        await addCommentToTask(taskId, formatted, clickupToken);
+        console.log(`✅ Comentario (formateado) añadido en tarea ${taskId} (thread ${threadId})`);
       }
     }
 
@@ -283,6 +452,7 @@ export async function pollGmail() {
     console.error("❌ Error en polling Gmail:", err.response?.data || err.message);
   }
 }
+
 
 
 
