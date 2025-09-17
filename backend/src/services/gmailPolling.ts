@@ -34,14 +34,12 @@ function gmailThreadWebUrl(threadId: string, accountIndex = 0) {
  *  Helpers de cuerpo/fecha Gmail
  *  ========================= */
 
-// Gmail codifica el cuerpo en base64url
 function decodeBody(data?: string): string {
   if (!data) return "";
   const b64 = data.replace(/-/g, "+").replace(/_/g, "/");
   return Buffer.from(b64, "base64").toString("utf-8");
 }
 
-// Extrae texto plano del payload
 function extractPlainTextFromPayload(payload: any): string {
   if (!payload) return "";
 
@@ -51,7 +49,6 @@ function extractPlainTextFromPayload(payload: any): string {
   if (mime === "text/plain") {
     return decodeBody(bodyData);
   }
-
   if (mime === "text/html") {
     const html = decodeBody(bodyData);
     return stripHtml(html);
@@ -96,12 +93,10 @@ function stripHtml(html: string): string {
   return text.replace(/\s+\n/g, "\n").replace(/\n\s+/g, "\n").replace(/[ \t]{2,}/g, " ").trim();
 }
 
-// Quita texto citado típico y líneas con “>”
 function removeQuotedText(text: string): string {
   if (!text) return text;
   let t = text.replace(/\r/g, "");
 
-  // Cortamos en marcadores de cita
   const markers = [
     /\nOn .+ wrote:\n/i,
     /\nEl .+ escribi[oó]:\n/i,
@@ -117,17 +112,14 @@ function removeQuotedText(text: string): string {
   }
   if (cutIndex !== -1) t = t.slice(0, cutIndex);
 
-  // Quita firmas
   const sigIdx = t.indexOf("\n-- ");
   if (sigIdx !== -1) t = t.slice(0, sigIdx);
 
-  // Quita líneas que empiezan con ">"
   t = t.split("\n").filter(line => !line.trim().startsWith(">")).join("\n");
 
   return t.trim();
 }
 
-// Formatea fecha en español
 function formatDateEsMadrid(msEpoch: number): string {
   const dtf = new Intl.DateTimeFormat("es-ES", {
     timeZone: "Europe/Madrid",
@@ -151,7 +143,6 @@ function extractEmail(addr?: string): string {
   return (m ? m[1] : addr).trim();
 }
 
-/** Formatea TODO el hilo como comentario limpio */
 function formatThreadAsComment(messages: any[]): string {
   const sorted = [...messages].sort((a, b) => Number(a.internalDate) - Number(b.internalDate));
 
@@ -182,11 +173,148 @@ function formatThreadAsComment(messages: any[]): string {
 /** =========================
  *  ClickUp helpers
  *  ========================= */
-// (idéntico a la versión anterior que ya tienes: findTaskByThreadId, findTaskBySubjectRecentInSpace, setTaskThreadField, createTaskForThread)
+
+async function findTaskByThreadId(
+  threadId: string,
+  spaceId: string,
+  threadFieldId: string,
+  clickupToken: string
+): Promise<string | null> {
+  const headers = { Authorization: clickupToken };
+
+  const listsRes = await axios.get(
+    `https://api.clickup.com/api/v2/space/${spaceId}/list`,
+    { headers, params: { archived: false } }
+  );
+  const lists = listsRes.data?.lists ?? [];
+
+  for (const list of lists) {
+    let page = 0;
+    while (true) {
+      const tasksRes = await axios.get(
+        `https://api.clickup.com/api/v2/list/${list.id}/task`,
+        {
+          headers,
+          params: { page, archived: false, include_closed: true },
+        }
+      );
+      const tasks = tasksRes.data?.tasks ?? [];
+      if (!tasks.length) break;
+
+      for (const t of tasks) {
+        const match = (t.custom_fields ?? []).find(
+          (f: any) => f.id === threadFieldId && f.value === threadId
+        );
+        if (match) return t.id;
+      }
+      page++;
+    }
+  }
+  return null;
+}
+
+async function findTaskBySubjectRecentInSpace(
+  subject: string,
+  spaceId: string,
+  clickupToken: string,
+  minutesWindow = 120
+): Promise<string | null> {
+  const headers = { Authorization: clickupToken };
+  const normalized = normalizeSubject(subject);
+  const now = Date.now();
+  const windowMs = minutesWindow * 60 * 1000;
+
+  const listsRes = await axios.get(
+    `https://api.clickup.com/api/v2/space/${spaceId}/list`,
+    { headers, params: { archived: false } }
+  );
+  const lists = listsRes.data?.lists ?? [];
+
+  for (const list of lists) {
+    let page = 0;
+    while (true) {
+      const res = await axios.get(
+        `https://api.clickup.com/api/v2/list/${list.id}/task`,
+        {
+          headers,
+          params: { page, archived: false, include_closed: true },
+        }
+      );
+      const tasks = res.data?.tasks ?? [];
+      if (!tasks.length) break;
+
+      for (const t of tasks) {
+        const name = normalizeSubject(t.name || "");
+        const created = Number(t.date_created || 0);
+        const recent = isFinite(created) && (now - created) <= windowMs;
+
+        if (recent && name === normalized) {
+          return t.id;
+        }
+      }
+      page++;
+    }
+  }
+  return null;
+}
+
+async function setTaskThreadField(
+  taskId: string,
+  threadFieldId: string,
+  threadId: string,
+  clickupToken: string
+) {
+  await axios.put(
+    `https://api.clickup.com/api/v2/task/${taskId}`,
+    { custom_fields: [{ id: threadFieldId, value: threadId }] },
+    { headers: { Authorization: clickupToken } }
+  );
+  console.log(`🔗 Campo HiloGMail actualizado en tarea ${taskId} → ${threadId}`);
+}
+
+async function createTaskForThread(
+  listId: string,
+  threadId: string,
+  subject: string,
+  snippet: string,
+  clickupToken: string,
+  threadFieldId: string
+): Promise<string> {
+  const headers = { Authorization: clickupToken };
+  const description = [
+    `**Origen:** Gmail`,
+    `**Hilo (threadId):** \`${threadId}\``,
+    `[Abrir en Gmail](${gmailThreadWebUrl(threadId)})`,
+    "",
+    `**Último mensaje (snippet):**`,
+    snippet || "(sin contenido)",
+  ].join("\n");
+
+  const body: any = {
+    name: subject || "(Sin asunto)",
+    description,
+    custom_fields: [{ id: threadFieldId, value: threadId }],
+  };
+
+  if (process.env.CLICKUP_TASK_STATUS) {
+    body.status = process.env.CLICKUP_TASK_STATUS;
+  }
+
+  const res = await axios.post(
+    `https://api.clickup.com/api/v2/list/${listId}/task`,
+    body,
+    { headers }
+  );
+  const taskId = res.data?.id;
+  if (!taskId) throw new Error("No se recibió taskId al crear la tarea");
+  console.log(`🆕 Tarea creada automáticamente (${taskId}) para threadId ${threadId}`);
+  return taskId;
+}
 
 /** =========================
  *  Polling principal
  *  ========================= */
+
 export async function pollGmail() {
   const accessToken = await getAccessToken();
   const clickupToken = process.env.CLICKUP_ACCESS_TOKEN!;
@@ -294,6 +422,7 @@ export async function pollGmail() {
     console.error("❌ Error en polling Gmail:", err.response?.data || err.message);
   }
 }
+
 
 
 
