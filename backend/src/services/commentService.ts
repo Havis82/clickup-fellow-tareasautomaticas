@@ -14,3 +14,22 @@ export async function addCommentToTask(taskId: string, comment: string, accessTo
     );
     return response.data;
 }
+
+export async function setThreadIdOnTask(
+  taskId: string,
+  threadId: string,
+  fieldId: string
+) {
+  const token = process.env.CLICKUP_ACCESS_TOKEN;
+  if (!token) throw new Error("Falta CLICKUP_ACCESS_TOKEN");
+
+  await axios.put(
+    `https://api.clickup.com/api/v2/task/${taskId}`,
+    {
+      custom_fields: [
+        { id: fieldId, value: threadId }
+      ]
+    },
+    { headers: { Authorization: token } }
+  );
+}
