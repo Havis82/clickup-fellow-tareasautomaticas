@@ -24,14 +24,14 @@ app.use(express.json());
 // app.use('/webhook/clickup', bodyParser.raw({ type: 'application/json' }));
 
 // Use JSON body parser for other routes
-app.set("trust proxy", 1);
+app.set('trust proxy', 1);
 app.use(
   session({
-    secret: process.env.SESSION_SECRET || "change-me",
+    secret: process.env.SESSION_SECRET || 'change-me',
     resave: false,
     saveUninitialized: false,
     cookie: { 
-      sameSite: "lax",
+      sameSite: 'lax',
       secure: true,            // Render va tras proxy https
     },
   })
