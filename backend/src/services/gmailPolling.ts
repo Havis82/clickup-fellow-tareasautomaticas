@@ -4,29 +4,43 @@ import { addCommentToTask } from "./commentService";
 
 let lastHistoryId: string | null = null;
 
+// TODO: sustituir por persistencia real (BBDD, KV, etc.)
+async function loadHistoryId(): Promise<string | null> {
+  return lastHistoryId;
+}
+async function saveHistoryId(id: string) {
+  lastHistoryId = id;
+}
+
+/**
+ * Polling de Gmail: busca mensajes nuevos y los enlaza a tareas en ClickUp
+ */
 export async function pollGmail() {
+  const accessToken = await getAccessToken();
+  const clickupToken = process.env.CLICKUP_ACCESS_TOKEN!;
+  const spaceId = process.env.CLICKUP_SPACE_ID!;
+  const threadFieldId = process.env.CLICKUP_THREAD_FIELD_ID!;
+
+  // 1. Inicializar historyId la primera vez
+  if (!lastHistoryId) {
+    const profileRes = await axios.get(
+      "https://gmail.googleapis.com/gmail/v1/users/me/profile",
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    await saveHistoryId(profileRes.data.historyId);
+    console.log("🔹 Inicializado historyId:", profileRes.data.historyId);
+    return;
+  }
+
   try {
-    const accessToken = await getAccessToken();
-    const clickupToken = process.env.CLICKUP_ACCESS_TOKEN!;
-    const spaceId = process.env.CLICKUP_SPACE_ID!;
-    const threadFieldId = process.env.CLICKUP_THREAD_FIELD_ID!;
-
-    // 1. Inicializar historyId la primera vez
-    if (!lastHistoryId) {
-      const profileRes = await axios.get(
-        "https://gmail.googleapis.com/gmail/v1/users/me/profile",
-        { headers: { Authorization: `Bearer ${accessToken}` } }
-      );
-      lastHistoryId = profileRes.data.historyId;
-      console.log("🔹 Inicializado historyId:", lastHistoryId);
-      return;
-    }
-
     // 2. Pedir cambios desde el último historyId
     const historyRes = await axios.get(
       "https://gmail.googleapis.com/gmail/v1/users/me/history",
       {
-        params: { startHistoryId: lastHistoryId },
+        params: {
+          startHistoryId: lastHistoryId,
+          historyTypes: "messageAdded", // opcional, limita a mensajes añadidos
+        },
         headers: { Authorization: `Bearer ${accessToken}` },
       }
     );
@@ -72,8 +86,22 @@ export async function pollGmail() {
     }
 
     // 6. Actualizar historyId
-    lastHistoryId = historyRes.data.historyId || lastHistoryId;
+    if (historyRes.data.historyId) {
+      await saveHistoryId(historyRes.data.historyId);
+    }
   } catch (err: any) {
+    const status = err?.response?.status;
+    const message = err?.response?.data?.error?.message;
+    if (status === 404) {
+      // Gmail indica que el historyId ya no es válido → reset
+      const profileRes = await axios.get(
+        "https://gmail.googleapis.com/gmail/v1/users/me/profile",
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      await saveHistoryId(profileRes.data.historyId);
+      console.warn("⚠️ historyId inválido, reseteado a:", profileRes.data.historyId);
+      return;
+    }
     console.error("❌ Error en polling Gmail:", err.response?.data || err.message);
   }
 }
