@@ -97,9 +97,11 @@ function removeQuotedText(text: string): string {
   if (!text) return text;
   let t = text.replace(/\r/g, "");
 
+  // Cortamos en marcadores de cita conocidos
   const markers = [
     /\nOn .+ wrote:\n/i,
     /\nEl .+ escribi[oó]:\n/i,
+    /\nEl .+ escribió:/i,               // 👈 nuevo: detecta "El … escribió:" sin salto final
     /\n-+ ?Mensaje original ?-+\n/i,
     /\n-+ ?Original Message ?-+\n/i,
     /\n-+ ?Forwarded message ?-+\n/i,
@@ -110,12 +112,24 @@ function removeQuotedText(text: string): string {
     const m = rx.exec(t);
     if (m && (cutIndex === -1 || m.index < cutIndex)) cutIndex = m.index;
   }
-  if (cutIndex !== -1) t = t.slice(0, cutIndex);
+  if (cutIndex !== -1) {
+    t = t.slice(0, cutIndex);
+  }
 
+  // Quita firmas estándar
   const sigIdx = t.indexOf("\n-- ");
-  if (sigIdx !== -1) t = t.slice(0, sigIdx);
+  if (sigIdx !== -1) {
+    t = t.slice(0, sigIdx);
+  }
 
+  // Quita líneas que empiezan con ">"
   t = t.split("\n").filter(line => !line.trim().startsWith(">")).join("\n");
+
+  // También por seguridad: si en cualquier parte aparece "escribió:" en solitario, cortamos ahí
+  const wroteIdx = t.toLowerCase().indexOf("escribió:");
+  if (wroteIdx !== -1) {
+    t = t.slice(0, wroteIdx);
+  }
 
   return t.trim();
 }
