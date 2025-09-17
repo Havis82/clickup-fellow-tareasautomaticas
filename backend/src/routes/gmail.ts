@@ -1,99 +1,61 @@
-// backend/src/routes/gmail.ts
-import express from 'express';
-import crypto from 'crypto';
-import axios from 'axios';
+import express, { Request, Response } from "express";
+import axios from "axios";
 
 const router = express.Router();
 
-const GOOGLE_AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth';
-const GOOGLE_SCOPES = ['https://www.googleapis.com/auth/gmail.readonly'];
+/**
+ * Ejemplo de endpoint para listar hilos de Gmail.
+ * Requiere que el usuario esté autenticado con Google (via auth.ts + Passport).
+ */
+router.get("/threads", async (req: Request, res: Response) => {
+  try {
+    const user = req.user as any;
+    if (!user?.accessToken) {
+      return res.status(401).json({ error: "Usuario no autenticado con Google" });
+    }
 
-// 1) Inicio del flujo OAuth: /auth/google
-router.get('/auth/google', (req, res) => {
-  const { GOOGLE_CLIENT_ID, GOOGLE_REDIRECT_URI } = process.env;
-  if (!GOOGLE_CLIENT_ID || !GOOGLE_REDIRECT_URI) {
-    return res.status(500).send('Faltan GOOGLE_CLIENT_ID o GOOGLE_REDIRECT_URI');
+    const response = await axios.get(
+      "https://gmail.googleapis.com/gmail/v1/users/me/threads",
+      {
+        headers: {
+          Authorization: `Bearer ${user.accessToken}`,
+        },
+      }
+    );
+
+    res.json(response.data);
+  } catch (error: any) {
+    console.error("Error obteniendo hilos de Gmail:", error.response?.data || error.message);
+    res.status(500).json({ error: "No se pudieron obtener los hilos de Gmail" });
   }
-
-  const state = crypto.randomUUID();
-  (req.session as any).google_oauth_state = state;
-
-  const params = new URLSearchParams({
-    client_id: GOOGLE_CLIENT_ID,
-    redirect_uri: GOOGLE_REDIRECT_URI,
-    response_type: 'code',
-    scope: GOOGLE_SCOPES.join(' '),
-    access_type: 'offline',
-    include_granted_scopes: 'true',
-    prompt: 'consent',
-    state,
-  });
-
-  return res.redirect(`${GOOGLE_AUTH_ENDPOINT}?${params.toString()}`);
 });
 
-// 2) Callback de Google: /auth/google/callback
-router.get('/auth/google/callback', async (req, res) => {
-  const { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI } = process.env;
-  if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !GOOGLE_REDIRECT_URI) {
-    return res.status(500).send('Faltan variables de entorno de Google');
-  }
-
-  const code = req.query.code as string | undefined;
-  const state = req.query.state as string | undefined;
-
-  // ⚠️ Si entras al callback sin 'code', reinicia el flujo correctamente CON scope.
-  if (!code) {
-    const newState = crypto.randomUUID();
-    (req.session as any).google_oauth_state = newState;
-
-    const params = new URLSearchParams({
-      client_id: GOOGLE_CLIENT_ID,
-      redirect_uri: GOOGLE_REDIRECT_URI,
-      response_type: 'code',
-      scope: ['https://www.googleapis.com/auth/gmail.readonly'].join(' '), // <— IMPORTANTE
-      access_type: 'offline',
-      include_granted_scopes: 'true',
-      prompt: 'consent',
-      state: newState,
-    });
-
-    return res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
-  }
-
-  // ✅ Solo validamos el 'state' cuando ya hay 'code'
-  const expectedState = (req.session as any).google_oauth_state;
-  if (!state || !expectedState || state !== expectedState) {
-    return res.status(400).send('Estado OAuth inválido o ausente');
-  }
-  delete (req.session as any).google_oauth_state;
-
+/**
+ * Ejemplo de endpoint para obtener un hilo concreto por ID
+ */
+router.get("/threads/:id", async (req: Request, res: Response) => {
   try {
-    const tokenRes = await axios.post('https://oauth2.googleapis.com/token', {
-      client_id: GOOGLE_CLIENT_ID,
-      client_secret: GOOGLE_CLIENT_SECRET,
-      code,
-      grant_type: 'authorization_code',
-      redirect_uri: GOOGLE_REDIRECT_URI,
-    });
+    const user = req.user as any;
+    if (!user?.accessToken) {
+      return res.status(401).json({ error: "Usuario no autenticado con Google" });
+    }
 
-    const { access_token, refresh_token, expires_in, id_token, token_type } = tokenRes.data;
+    const { id } = req.params;
 
-    // TODO: guarda 'refresh_token' de forma segura para uso posterior
-    return res.json({
-      ok: true,
-      token_type,
-      expires_in,
-      access_token,
-      refresh_token,
-      id_token,
-      scopes: ['https://www.googleapis.com/auth/gmail.readonly'],
-    });
-  } catch (err: any) {
-    console.error('Error al intercambiar el código por tokens:', err?.response?.data || err?.message || err);
-    return res.status(500).send('Error al intercambiar el código por tokens');
+    const response = await axios.get(
+      `https://gmail.googleapis.com/gmail/v1/users/me/threads/${id}`,
+      {
+        headers: {
+          Authorization: `Bearer ${user.accessToken}`,
+        },
+      }
+    );
+
+    res.json(response.data);
+  } catch (error: any) {
+    console.error("Error obteniendo hilo de Gmail:", error.response?.data || error.message);
+    res.status(500).json({ error: "No se pudo obtener el hilo de Gmail" });
   }
 });
 
 export default router;
-
