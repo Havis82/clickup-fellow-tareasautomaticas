@@ -15,9 +15,25 @@ import webhookRoutes from './routes/webhook';
 import bodyParser from 'body-parser';
 import { pollGmail } from "./services/gmailPolling";//import './smee-client';  // Add this line in development
 
-setInterval(() => {
-  pollGmail();
-}, 60 * 1000);
+const POLL_MS = 60_000;
+
+setInterval(async () => {
+  try {
+    console.log("[poll] tick");
+    await pollGmail();
+    console.log("[poll] done");
+  } catch (err: any) {
+    console.error("[poll] ERROR:", err?.response?.data || err?.message || err);
+  }
+}, POLL_MS);
+
+// Opcional, para evitar que un unhandledRejection tumbe el proceso
+process.on("unhandledRejection", (reason) => {
+  console.error("UNHANDLED REJECTION:", reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("UNCAUGHT EXCEPTION:", err);
+});
 
 const app = express();
 
