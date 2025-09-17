@@ -13,7 +13,11 @@ import { errorHandler } from './middleware/errorHandler';
 import { tokenRefresherMiddleware } from './middleware/tokenRefresher';
 import webhookRoutes from './routes/webhook';
 import bodyParser from 'body-parser';
-//import './smee-client';  // Add this line in development
+import { pollGmail } from "./services/gmailPolling";//import './smee-client';  // Add this line in development
+
+setInterval(() => {
+  pollGmail();
+}, 60 * 1000);
 
 const app = express();
 
