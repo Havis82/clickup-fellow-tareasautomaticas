@@ -97,11 +97,10 @@ function removeQuotedText(text: string): string {
   if (!text) return text;
   let t = text.replace(/\r/g, "");
 
-  // Cortamos en marcadores de cita conocidos
   const markers = [
     /\nOn .+ wrote:\n/i,
     /\nEl .+ escribi[oó]:\n/i,
-    /\nEl .+ escribió:/i,               // 👈 nuevo: detecta "El … escribió:" sin salto final
+    /\nEl .+ escribió:/i,
     /\n-+ ?Mensaje original ?-+\n/i,
     /\n-+ ?Original Message ?-+\n/i,
     /\n-+ ?Forwarded message ?-+\n/i,
@@ -116,16 +115,13 @@ function removeQuotedText(text: string): string {
     t = t.slice(0, cutIndex);
   }
 
-  // Quita firmas estándar
   const sigIdx = t.indexOf("\n-- ");
   if (sigIdx !== -1) {
     t = t.slice(0, sigIdx);
   }
 
-  // Quita líneas que empiezan con ">"
   t = t.split("\n").filter(line => !line.trim().startsWith(">")).join("\n");
 
-  // También por seguridad: si en cualquier parte aparece "escribió:" en solitario, cortamos ahí
   const wroteIdx = t.toLowerCase().indexOf("escribió:");
   if (wroteIdx !== -1) {
     t = t.slice(0, wroteIdx);
@@ -157,31 +153,23 @@ function extractEmail(addr?: string): string {
   return (m ? m[1] : addr).trim();
 }
 
-function formatThreadAsComment(messages: any[]): string {
-  const sorted = [...messages].sort((a, b) => Number(a.internalDate) - Number(b.internalDate));
+/** Formatea solo un mensaje */
+function formatSingleMessageAsComment(msg: any): string {
+  const headers = msg.payload?.headers as any[] | undefined;
+  const from = extractEmail(headerValue(headers, "From"));
+  const to = extractEmail(headerValue(headers, "To"));
+  const when = Number(msg.internalDate || 0);
+  const whenTxt = formatDateEsMadrid(when);
 
-  const blocks: string[] = [];
-  for (const msg of sorted) {
-    const headers = msg.payload?.headers as any[] | undefined;
-    const from = extractEmail(headerValue(headers, "From"));
-    const to = extractEmail(headerValue(headers, "To"));
-    const when = Number(msg.internalDate || 0);
-    const whenTxt = formatDateEsMadrid(when);
+  const rawBody = extractPlainTextFromPayload(msg.payload);
+  const body = removeQuotedText(rawBody);
 
-    const rawBody = extractPlainTextFromPayload(msg.payload);
-    const body = removeQuotedText(rawBody);
-
-    const block = [
-      whenTxt,
-      `De: ${from}`,
-      `A: ${to}`,
-      body || "(sin contenido)",
-    ].join("\n");
-
-    blocks.push(block);
-  }
-
-  return blocks.join("\n--------------------------------------\n");
+  return [
+    whenTxt,
+    `De: ${from}`,
+    `A: ${to}`,
+    body || "(sin contenido)",
+  ].join("\n");
 }
 
 /** =========================
@@ -401,18 +389,11 @@ export async function pollGmail() {
           continue;
         }
 
-        const threadRes = await axios.get(
-          `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}`,
-          {
-            headers: { Authorization: `Bearer ${accessToken}` },
-            params: { format: "full" },
-          }
-        );
-        const messages = threadRes.data?.messages ?? [];
-        const formatted = formatThreadAsComment(messages);
+        // 🚀 Solo el mensaje actual
+        const formatted = formatSingleMessageAsComment(msgRes.data);
 
         await addCommentToTask(taskId, formatted, clickupToken);
-        console.log(`✅ Comentario limpio añadido en tarea ${taskId} (thread ${threadId})`);
+        console.log(`✅ Comentario (último mensaje) añadido en tarea ${taskId} (thread ${threadId})`);
       }
     }
 
