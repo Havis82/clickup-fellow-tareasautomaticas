@@ -15,7 +15,7 @@ import webhookRoutes from './routes/webhook';
 import bodyParser from 'body-parser';
 import { pollGmail } from "./services/gmailPolling";//import './smee-client';  // Add this line in development
 
-const POLL_MS = 60_000;
+const POLL_MS = Number(process.env.GMAIL_POLL_MS ?? 60_000);
 
 setInterval(async () => {
   try {
