@@ -41,7 +41,7 @@ app.use(passport.initialize() as RequestHandler);
 app.use(passport.session() as RequestHandler);
 
 app.use('/auth', authRoutes);
-app.use('/', gmailRoutes); // esto registra GET /auth/google/callback
+app.use('/gmail', gmailRoutes); // esto registra GET /auth/google/callback
 app.use('/webhook', webhookRoutes);
 
 // Add this new route
