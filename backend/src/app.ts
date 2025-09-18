@@ -15,6 +15,13 @@ import webhookRoutes from './routes/webhook';
 import bodyParser from 'body-parser';
 import { pollGmail } from "./services/gmailPolling";//import './smee-client';  // Add this line in development
 
+const app = express();
+
+// Endpoint básico de healthcheck
+app.get("/health", (req, res) => {
+  res.status(200).send("OK");
+});
+
 const POLL_MS = Number(process.env.GMAIL_POLL_MS ?? 60_000);
 
 setInterval(async () => {
@@ -34,8 +41,6 @@ process.on("unhandledRejection", (reason) => {
 process.on("uncaughtException", (err) => {
   console.error("UNCAUGHT EXCEPTION:", err);
 });
-
-const app = express();
 
 // This line is crucial for parsing JSON request bodies
 app.use(express.json());
