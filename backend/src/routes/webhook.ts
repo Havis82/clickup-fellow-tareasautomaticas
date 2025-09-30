@@ -2,7 +2,7 @@ import express, { Request, Response } from 'express';
 import { google } from 'googleapis';
 import { addCommentToTask } from '../services/commentService';
 import axios from "axios";
-import { getAccessToken } from "../utils/googleAuth";
+import { getAccessToken } from "../utils/fellowAuth";
 
 const router = express.Router();
 
