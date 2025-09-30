@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { refreshToken } from '../services/clickupTokenRefresher';
+import { refreshToken } from '../services/tokenRefresher';
 
 export async function tokenRefresherMiddleware(req: Request, res: Response, next: NextFunction) {
   if (req.isAuthenticated() && req.user && 'refreshToken' in req.user) {
