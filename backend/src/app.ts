@@ -8,12 +8,11 @@ import session from 'express-session';
 import passport from './config/passport';
 import type { RequestHandler } from 'express';
 import authRoutes from './routes/auth';
-import gmailRoutes from './routes/gmail';
 import { errorHandler } from './middleware/errorHandler';
 import { tokenRefresherMiddleware } from './middleware/tokenRefresher';
 import webhookRoutes from './routes/webhook';
 import bodyParser from 'body-parser';
-import { pollGmail } from "./services/gmailPolling";//import './smee-client';  // Add this line in development
+//import './smee-client';  // Add this line in development
 
 const app = express();
 
@@ -66,7 +65,6 @@ app.use(passport.initialize() as RequestHandler);
 app.use(passport.session() as RequestHandler);
 
 app.use('/auth', authRoutes);
-app.use('/gmail', gmailRoutes); // esto registra GET /auth/google/callback
 app.use('/webhook', webhookRoutes);
 
 // Add this new route
